@@ -127,10 +127,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="EnergyTree.cpp" />
     <ClCompile Include="Projekt06.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="EnergyTree.h" />
     <ClInclude Include="Measurement.h" />
+    <ClInclude Include="TreeStructure.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
