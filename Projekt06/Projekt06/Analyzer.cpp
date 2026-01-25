@@ -1,54 +1,53 @@
+// Analyzer.cpp
 #include "Analyzer.h"
-#include <ctime> // W standardzie C++ po prostu <ctime> i mktime, 
-// ale tutaj u?yjemy pomocniczej funkcji wewn?trz klasy
+#include <iostream>
 
-time_t Analyzer::tmToTimeT(const std::tm& t) {
-    std::tm temp = t;
-    return std::mktime(&temp);
+std::function<double(const Measurement&)> Analyzer::getSelector(DataType type) {
+    switch (type) {
+    case DataType::AUTO: return [](const Measurement& m) { return m.autoconsumption; };
+    case DataType::EXPORT: return [](const Measurement& m) { return m.exportEnergy; };
+    case DataType::IMPORT: return [](const Measurement& m) { return m.importEnergy; };
+    case DataType::CONS: return [](const Measurement& m) { return m.consumption; };
+    case DataType::PROD: return [](const Measurement& m) { return m.production; };
+    default: return [](const Measurement& m) { return 0.0; };
+    }
 }
 
-bool Analyzer::isBetween(const std::tm& current, const std::tm& start, const std::tm& end) {
-    // Por?wnanie prostsze przez zamian? na time_t
-    // Uwaga: mktime modyfikuje struktur?, wi?c kopiujemy w tmToTimeT
-    time_t currT = tmToTimeT(current);
-    time_t startT = tmToTimeT(start);
-    time_t endT = tmToTimeT(end);
-    return (currT >= startT && currT <= endT);
-}
-
-double Analyzer::calculateSum(const std::tm& start, const std::tm& end,
-    std::function<double(const Measurement&)> selector) {
-    double sum = 0.0;
-    // U?ycie wzorca iterator do przej?cia po drzewie
+double Analyzer::getSum(std::tm s, std::tm e, DataType type) {
+    double sum = 0;
+    auto sel = getSelector(type);
+    time_t start = mktime(&s), end = mktime(&e);
     for (auto it = tree.begin(); it != tree.end(); ++it) {
-        if (isBetween(it->timestamp, start, end)) {
-            sum += selector(*it); // Wywo?anie lambdy
-        }
+        time_t cur = it->tmToTime();
+        if (cur >= start && cur <= end) sum += sel(*it);
     }
     return sum;
 }
 
-double Analyzer::calculateAvg(const std::tm& start, const std::tm& end,
-    std::function<double(const Measurement&)> selector) {
-    double sum = 0.0;
-    int count = 0;
+double Analyzer::getAvg(std::tm s, std::tm e, DataType type) {
+    double sum = 0; int count = 0;
+    auto sel = getSelector(type);
+    time_t start = mktime(&s), end = mktime(&e);
     for (auto it = tree.begin(); it != tree.end(); ++it) {
-        if (isBetween(it->timestamp, start, end)) {
-            sum += selector(*it);
-            count++;
-        }
+        time_t cur = it->tmToTime();
+        if (cur >= start && cur <= end) { sum += sel(*it); count++; }
     }
-    return (count > 0) ? (sum / count) : 0.0;
+    return count > 0 ? sum / count : 0;
 }
 
-std::function<double(const Measurement&)> Analyzer::getSelector(ValueType type) {
-    // Zwracanie lambd w zale?no?ci od typu
-    switch (type) {
-    case ValueType::AUTOCONSUMPTION: return [](const Measurement& m) { return m.autoconsumption; };
-    case ValueType::EXPORT: return [](const Measurement& m) { return m.exportEnergy; };
-    case ValueType::IMPORT: return [](const Measurement& m) { return m.importEnergy; };
-    case ValueType::CONSUMPTION: return [](const Measurement& m) { return m.consumption; };
-    case ValueType::PRODUCTION: return [](const Measurement& m) { return m.production; };
-    default: return [](const Measurement& m) { return 0.0; };
+void Analyzer::search(DataType type, double val, double tol, std::tm s, std::tm e) {
+    auto sel = getSelector(type);
+    time_t start = mktime(&s), end = mktime(&e);
+    for (auto it = tree.begin(); it != tree.end(); ++it) {
+        double v = sel(*it);
+        if (it->tmToTime() >= start && it->tmToTime() <= end && v >= val - tol && v <= val + tol) {
+            std::cout << "Znaleziono: " << v << " W przy dacie " << it->timestamp.tm_mday << "." << it->timestamp.tm_mon + 1 << "\n";
+        }
     }
+}
+
+void Analyzer::compare(std::tm s1, std::tm e1, std::tm s2, std::tm e2, DataType type) {
+    double sum1 = getSum(s1, e1, type);
+    double sum2 = getSum(s2, e2, type);
+    std::cout << "Przedzial 1: " << sum1 << " W, Przedzial 2: " << sum2 << " W. Roznica: " << sum1 - sum2 << " W\n";
 }

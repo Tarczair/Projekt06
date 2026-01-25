@@ -1,91 +1,46 @@
+// EnergyTree.cpp
 #include "EnergyTree.h"
 
-void EnergyTree::addMeasurement(std::unique_ptr<Measurement> m) {
-    int year = m->timestamp.tm_year + 1900;
-    int month = m->timestamp.tm_mon + 1;
-    int day = m->timestamp.tm_mday;
-    int hour = m->timestamp.tm_hour;
+bool EnergyTree::addMeasurement(std::unique_ptr<Measurement> m) {
+    int y = m->timestamp.tm_year + 1900;
+    int mon = m->timestamp.tm_mon + 1;
+    int d = m->timestamp.tm_mday;
+    int q = m->timestamp.tm_hour / 6;
 
-    // Obliczanie æwiartki: 0 (0-5), 1 (6-11), 2 (12-17), 3 (18-23)
-    int quarterIdx = hour / 6;
+    if (!root[y]) root[y] = std::make_unique<YearNode>();
+    if (!root[y]->months[mon]) root[y]->months[mon] = std::make_unique<MonthNode>();
+    if (!root[y]->months[mon]->days[d]) root[y]->months[mon]->days[d] = std::make_unique<DayNode>();
+    if (!root[y]->months[mon]->days[d]->quarters[q]) root[y]->months[mon]->days[d]->quarters[q] = std::make_unique<QuarterNode>();
 
-    // Tworzenie struktury jeœli nie istnieje (lazy initialization)
-    if (root.find(year) == root.end())
-        root[year] = std::make_unique<YearNode>();
-
-    auto& monthMap = root[year]->months;
-    if (monthMap.find(month) == monthMap.end())
-        monthMap[month] = std::make_unique<MonthNode>();
-
-    auto& dayMap = monthMap[month]->days;
-    if (dayMap.find(day) == dayMap.end())
-        dayMap[day] = std::make_unique<DayNode>();
-
-    auto& quartMap = dayMap[day]->quarters;
-    if (quartMap.find(quarterIdx) == quartMap.end())
-        quartMap[quarterIdx] = std::make_unique<QuarterNode>();
-
-    quartMap[quarterIdx]->add(std::move(m));
+    return root[y]->months[mon]->days[d]->quarters[q]->add(std::move(m));
 }
 
-// --- IMPLEMENTACJA ITERATORA ---
-
-EnergyTree::Iterator::Iterator(std::map<int, std::unique_ptr<YearNode>>& root, bool end)
-    : isEnd(end) {
-
-    if (isEnd || root.empty()) {
-        isEnd = true;
-        return;
-    }
-
-    yearIt = root.begin(); yearEnd = root.end();
-
-    // Ustawianie iteratorów w dó³ hierarchii na pierwszy element
-    monthIt = yearIt->second->months.begin(); monthEnd = yearIt->second->months.end();
-    dayIt = monthIt->second->days.begin(); dayEnd = monthIt->second->days.end();
-    quartIt = dayIt->second->quarters.begin(); quartEnd = dayIt->second->quarters.end();
-    vecIt = quartIt->second->measurements.begin(); vecEnd = quartIt->second->measurements.end();
-}
-
-const Measurement& EnergyTree::Iterator::operator*() const {
-    return *(*vecIt);
-}
-
-const Measurement* EnergyTree::Iterator::operator->() const {
-    return vecIt->get();
+EnergyTree::Iterator::Iterator(std::map<int, std::unique_ptr<YearNode>>& r, bool end) : isEnd(end) {
+    yIt = r.begin(); yEnd = r.end();
+    if (isEnd || yIt == yEnd) { isEnd = true; return; }
+    mIt = yIt->second->months.begin(); mEnd = yIt->second->months.end();
+    dIt = mIt->second->days.begin(); dEnd = mIt->second->days.end();
+    qIt = dIt->second->quarters.begin(); qEnd = dIt->second->quarters.end();
+    vIt = qIt->second->measurements.begin(); vEnd = qIt->second->measurements.end();
 }
 
 EnergyTree::Iterator& EnergyTree::Iterator::operator++() {
-    if (isEnd) return *this;
+    if (++vIt != vEnd) return *this;
+    if (++qIt != qEnd) { vIt = qIt->second->measurements.begin(); vEnd = qIt->second->measurements.end(); return *this; }
 
-    ++vecIt;
-    if (vecIt != vecEnd) return *this;
+    auto nextDay = [&]() {
+        if (++dIt != dEnd) { qIt = dIt->second->quarters.begin(); qEnd = dIt->second->quarters.end(); return true; }
+        if (++mIt != mEnd) { dIt = mIt->second->days.begin(); dEnd = mIt->second->days.end(); return true; }
+        if (++yIt != yEnd) { mIt = yIt->second->months.begin(); mEnd = yIt->second->months.end(); return true; }
+        return false;
+        };
 
-    // Koniec wektora w æwiartce, idŸ do nastêpnej æwiartki
-    ++quartIt;
-    while (quartIt == quartEnd) {
-        ++dayIt;
-        while (dayIt == dayEnd) {
-            ++monthIt;
-            while (monthIt == monthEnd) {
-                ++yearIt;
-                if (yearIt == yearEnd) {
-                    isEnd = true;
-                    return *this;
-                }
-                monthIt = yearIt->second->months.begin();
-                monthEnd = yearIt->second->months.end();
-            }
-            dayIt = monthIt->second->days.begin();
-            dayEnd = monthIt->second->days.end();
+    while (nextDay()) {
+        if (!dIt->second->quarters.empty()) {
+            qIt = dIt->second->quarters.begin(); qEnd = dIt->second->quarters.end();
+            vIt = qIt->second->measurements.begin(); vEnd = qIt->second->measurements.end();
+            return *this;
         }
-        quartIt = dayIt->second->quarters.begin();
-        quartEnd = dayIt->second->quarters.end();
     }
-
-    // Znaleziono now¹ æwiartkê, ustawiamy wektor
-    vecIt = quartIt->second->measurements.begin();
-    vecEnd = quartIt->second->measurements.end();
-
-    return *this;
+    isEnd = true; return *this;
 }

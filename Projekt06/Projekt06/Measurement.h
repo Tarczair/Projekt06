@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <fstream>
-#include <iomanip>
+#include <ctime>
 
 struct Measurement {
     std::tm timestamp;
@@ -17,16 +17,20 @@ struct Measurement {
         timestamp = {};
     }
 
-    // Pomocnicza funkcja do porównywania czasu
+    // Porównanie dla sortowania i unikalnoœci
     bool operator<(const Measurement& other) const {
-        if (timestamp.tm_year != other.timestamp.tm_year) return timestamp.tm_year < other.timestamp.tm_year;
-        if (timestamp.tm_mon != other.timestamp.tm_mon) return timestamp.tm_mon < other.timestamp.tm_mon;
-        if (timestamp.tm_mday != other.timestamp.tm_mday) return timestamp.tm_mday < other.timestamp.tm_mday;
-        if (timestamp.tm_hour != other.timestamp.tm_hour) return timestamp.tm_hour < other.timestamp.tm_hour;
-        return timestamp.tm_min < other.timestamp.tm_min;
+        return tmToTime() < other.tmToTime();
     }
 
-    // Serializacja do pliku binarnego
+    bool operator==(const Measurement& other) const {
+        return tmToTime() == other.tmToTime();
+    }
+
+    time_t tmToTime() const {
+        std::tm temp = timestamp;
+        return std::mktime(&temp);
+    }
+
     void serialize(std::ofstream& ofs) const {
         ofs.write(reinterpret_cast<const char*>(&timestamp), sizeof(timestamp));
         ofs.write(reinterpret_cast<const char*>(&autoconsumption), sizeof(autoconsumption));
@@ -36,7 +40,6 @@ struct Measurement {
         ofs.write(reinterpret_cast<const char*>(&production), sizeof(production));
     }
 
-    // Deserializacja z pliku binarnego
     void deserialize(std::ifstream& ifs) {
         ifs.read(reinterpret_cast<char*>(&timestamp), sizeof(timestamp));
         ifs.read(reinterpret_cast<char*>(&autoconsumption), sizeof(autoconsumption));
